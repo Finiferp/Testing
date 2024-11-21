@@ -20,7 +20,6 @@ println (){
 
 if [ ! -w "${PWD}" ]; then
     println_red "Directory is not writable!"
-    usage
 fi
 
 println_red "!!! Installation started !!!"
