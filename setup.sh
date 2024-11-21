@@ -45,28 +45,40 @@ sudo nmcli connection modify Hotspot connection.autoconnect yes
 
 
 
-# install mosquitto boker
+# install mosquitto broker
 println_green "Installing mosquitto broker..."
 
 sudo apt-get install mosquitto mosquitto-clients -y
 
-mosquitto_passwd -U /etc/mosquitto/passwd
+println_green "Enter your MQTT username:"
+read USERNAME
+
+mosquitto_passwd -c /etc/mosquitto/passwd $USERNAME
+
+println_green "Enter your MQTT username for Node-Red:"
+read NODEREDUSERNAME
+mosquitto_passwd -b /etc/mosquitto/passwd $NODEREDUSERNAME
+
 
 ACL_FILE="/etc/mosquitto/acl"
 
-# Create or overwrite the file with the required content
-sudo sh -c "cat > $ACL_FILE" <<EOF
-user Username
+sudo tee "$ACL_FILE" > /dev/null <<EOF
+user $USERNAME
 topic readwrite #
 
-user MQTTNodeRed
+user $NODEREDUSERNAME
 topic read #
 EOF
 
-# Restart the Mosquitto service
+# Restart Mosquitto service
+if sudo systemctl restart mosquitto; then
+    println_green "Mosquitto broker installed and configured successfully."
+else
+    echo "Failed to restart Mosquitto. Please check your configuration."
+    exit 1
+fi
+
 sudo systemctl restart mosquitto
-
-
 
 # install Database
 println_green "Installing database..."
@@ -117,11 +129,13 @@ println_green "Generating SSH certificate..."
 println_green "Enter your Passphrase:"
 read PASSPHRASE
 
-sudo ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N "$PASSPHRASE"
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N "$PASSPHRASE"
 
-sudo cd ~/.ssh
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
 
-sudo cat id_rsa.pub >> authorized_keys
+cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
 
 println_green "SSH certificate Generated successfully."
 
@@ -147,21 +161,25 @@ NTP_SERVER="194.154.216.81"
 NTP_CONFIG="/etc/ntp.conf"
 
 if [[ -f "$NTP_CONFIG" ]]; then
-    println "Updating NTP server configuration..."
+    println_green "Updating NTP server configuration..."
+
     # Comment out existing server lines
-    sed -i 's/^server /#server /g' "$NTP_CONFIG"
+    sudo sed -i 's/^server /#server /g' "$NTP_CONFIG"
+
     # Add the new NTP server
-    println_green "server $NTP_SERVER iburst" >> "$NTP_CONFIG"
+    echo "server $NTP_SERVER iburst" | sudo tee -a "$NTP_CONFIG" > /dev/null
+
     println_green "NTP server updated to $NTP_SERVER."
 else
     println_green "NTP configuration file not found at $NTP_CONFIG."
     exit 1
 fi
 
-if systemctl restart ntp 2>/dev/null; then
-    println "NTP service restarted successfully."
-elif service ntp restart 2>/dev/null; then
-    println "NTP service restarted successfully."
+# Restart the NTP service
+if sudo systemctl restart ntp 2>/dev/null; then
+    println_green "NTP service restarted successfully."
+elif sudo service ntp restart 2>/dev/null; then
+    println_green "NTP service restarted successfully."
 else
     println "Failed to restart the NTP service. Please check your system."
     exit 1
@@ -172,7 +190,7 @@ println_green "Configuring IP tables..."
 
 sudo apt install iptables
 
-iptables -A FORWARD -i wlan0 -o $INTERFACE -j DROP
+iptables -A FORWARD -i $INTERFACE -o eth0 -j DROP
 
 
 
