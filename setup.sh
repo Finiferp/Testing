@@ -148,7 +148,7 @@ wget -O- http://www.piduino.org/piduino-key.asc | sudo apt-key add -echo 'deb ht
 
 sudo apt update
 
-sudo apt install mbpoll
+sudo apt install mbpoll -y
 
 
 
@@ -157,31 +157,29 @@ println_green "Configuring ntp server..."
 
 sudo apt install ntp -y
 
+CONFIG_FILE="/etc/ntpsec/ntp.conf"
 NTP_SERVER="194.154.216.81"
-NTP_CONFIG="/etc/ntp.conf"
 
-if [[ -f "$NTP_CONFIG" ]]; then
-    println_green "Updating NTP server configuration..."
+# Backup the original configuration file
+sudo cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
 
-    # Comment out existing server lines
-    sudo sed -i 's/^server /#server /g' "$NTP_CONFIG"
-
-    # Add the new NTP server
-    echo "server $NTP_SERVER iburst" | sudo tee -a "$NTP_CONFIG" > /dev/null
-
-    println_green "NTP server updated to $NTP_SERVER."
-else
-    println_green "NTP configuration file not found at $NTP_CONFIG."
+# Check if the configuration file exists
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Configuration file not found at $CONFIG_FILE. Exiting."
     exit 1
 fi
 
+# Update the NTP configuration
+sudo sed -i -e 's/^\(pool \|server \)/#&/g' "$CONFIG_FILE"
+
+# Add the new NTP server line
+sudo sed -i '/^# Specify one or more NTP servers\./a server '"$NTP_SERVER"' iburst' "$CONFIG_FILE"
+
 # Restart the NTP service
-if sudo systemctl restart ntp 2>/dev/null; then
-    println_green "NTP service restarted successfully."
-elif sudo service ntp restart 2>/dev/null; then
-    println_green "NTP service restarted successfully."
+if sudo systemctl restart ntpsec; then
+    echo "NTP server updated to $NTP_SERVER and service restarted successfully."
 else
-    println "Failed to restart the NTP service. Please check your system."
+    echo "Failed to restart the NTP service. Please check the configuration."
     exit 1
 fi
 
